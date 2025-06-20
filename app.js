@@ -7,7 +7,16 @@ const jwt = require("jsonwebtoken");
 const cors = require("cors");
 
 const app = express();
-app.use(cors());
+app.use(
+  cors({
+    origin: [
+      "http://localhost:3000", // for local testing
+      "https://medication-manaegment.vercel.app" // your Vercel frontend URL
+    ],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    credentials: true, // if you're sending cookies or auth headers
+  })
+);
 app.use(express.json());
 
 let dbPath = path.join(__dirname, "database.db");
