@@ -7,8 +7,12 @@ const jwt = require("jsonwebtoken");
 const cors = require("cors");
 
 const app = express();
+app.use(
+  cors({
+    origin: ["http://localhost:3000"],
+  })
+);
 app.use(express.json());
-app.use(cors());
 
 let dbPath = path.join(__dirname, "database.db");
 let db = null;
@@ -23,15 +27,14 @@ let initializeDb = async () => {
       console.log("Server is started");
     });
 
-     await db.run(`
+    await db.run(`
       CREATE TABLE IF NOT EXISTS user (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE NOT NULL,
         password TEXT NOT NULL,
         type TEXT NOT NULL CHECK(type IN ('patient', 'caretaker'))
       );
-    `);    
-
+    `);
   } catch (err) {
     console.log(err);
     process.exit(1);
@@ -99,9 +102,9 @@ app.post("/register", async (request, response) => {
     return;
   }
 
-  if (type === 'caretaker' && code !== 'CARETAKER980') {
+  if (type === "caretaker" && code !== "CARETAKER980") {
     response.status(400);
-    response.send('Invalid caretaker code');
+    response.send("Invalid caretaker code");
     return;
   }
 
@@ -121,4 +124,4 @@ app.post("/register", async (request, response) => {
   response.send("User created successfully");
 });
 
-module.exports = app
+module.exports = app;

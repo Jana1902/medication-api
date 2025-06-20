@@ -2,7 +2,7 @@ POST https://medication-api-b2jz.onrender.com/register
 content-type: application/json
 
 {
-  "username": "Jana",
+  "username": "Jana1",
   "password": "richard_567",
   "type": "caretaker",
   "code": "CARETAKER980"
