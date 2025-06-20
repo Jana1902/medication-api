@@ -1,9 +1,9 @@
-POST http://localhost:3000/register/
+POST https://medication-api-b2jz.onrender.com/register
 content-type: application/json
 
 {
-  "username": "Janea",
+  "username": "Jana",
   "password": "richard_567",
-  "type": "patient",
-  "code": ""
+  "type": "caretaker",
+  "code": "CARETAKER980"
 }
