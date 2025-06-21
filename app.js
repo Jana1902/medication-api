@@ -334,4 +334,58 @@ app.get("/patient/:id/monthly-percentage", verifyUser, async (req, res) => {
   }
 });
 
+app.get("/caretaker-dashboard", verifyUser, async (req, res) => {
+  const { username } = req.query;
+
+  try {
+    const totalPatientsQuery = `
+      SELECT COUNT(*) AS count
+      FROM caretaker_patient cp
+      JOIN user c ON cp.caretaker_id = c.id
+      WHERE c.username = ?;
+    `;
+    const totalMedicationsQuery = `
+      SELECT COUNT(*) AS count
+      FROM medication_plan mp
+      JOIN caretaker_patient cp ON mp.patient_id = cp.patient_id
+      JOIN user c ON cp.caretaker_id = c.id
+      WHERE c.username = ?;
+    `;
+    const takenTodayQuery = `
+      SELECT COUNT(DISTINCT mp.patient_id) AS count
+      FROM daily_actions da
+      JOIN medication_plan mp ON da.medication_id = mp.id
+      JOIN caretaker_patient cp ON mp.patient_id = cp.patient_id
+      JOIN user c ON cp.caretaker_id = c.id
+      WHERE da.action_date = date('now') AND da.status = 'taken' AND c.username = ?;
+    `;
+    const pendingTodayQuery = `
+      SELECT COUNT(DISTINCT mp.patient_id) AS count
+      FROM daily_actions da
+      JOIN medication_plan mp ON da.medication_id = mp.id
+      JOIN caretaker_patient cp ON mp.patient_id = cp.patient_id
+      JOIN user c ON cp.caretaker_id = c.id
+      WHERE da.action_date = date('now') AND da.status = 'pending' AND c.username = ?;
+    `;
+
+    const [patients, medications, taken, pending] = await Promise.all([
+      db.get(totalPatientsQuery, username),
+      db.get(totalMedicationsQuery, username),
+      db.get(takenTodayQuery, username),
+      db.get(pendingTodayQuery, username),
+    ]);
+
+    res.json({
+      patients: patients.count,
+      medications: medications.count,
+      taken: taken.count,
+      pending: pending.count,
+    });
+  } catch (err) {
+    console.error("Error in caretaker dashboard:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 module.exports = app;
