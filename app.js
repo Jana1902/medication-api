@@ -31,10 +31,6 @@ let initializeDb = async () => {
     app.listen(3000, () => {
       console.log("Server is started");
     });
-
-    const data = await db.get(`SELECT * FROM user WHERE username = ?`, [
-      "kirubha",
-    ]);
     console.log(data);
 
     await db.run(`
@@ -241,13 +237,29 @@ app.post("/add-patient", async (req, res) => {
   const { name, password, caretakerId } = req.body;
 
   try {
+    const existingUser = await db.get(
+      `SELECT * FROM user WHERE username = ?`,
+      [name]
+    );
+    if (existingUser) {
+      return res.status(400).json({ error: "Username already exists" });
+    }
+
+    if (!password || password.length < 8) {
+      return res.status(400).json({ error: "Password must be at least 8 characters long" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Insert patient into user table
     const result = await db.run(
       `INSERT INTO user (username, password, type) VALUES (?, ?, 'patient')`,
-      [name, password]
+      [name, hashedPassword]
     );
 
     const patientId = result.lastID;
 
+    // Link to caretaker
     await db.run(
       `INSERT INTO caretaker_patient (caretaker_id, patient_id) VALUES (?, ?)`,
       [caretakerId, patientId]
