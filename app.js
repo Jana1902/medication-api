@@ -11,7 +11,7 @@ app.use(
   cors({
     origin: [
       "http://localhost:3000", // for local testing
-      "https://medication-manaegment.vercel.app" // your Vercel frontend URL
+      "https://medication-manaegment.vercel.app", // your Vercel frontend URL
     ],
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     credentials: true, // if you're sending cookies or auth headers
@@ -40,6 +40,35 @@ let initializeDb = async () => {
         type TEXT NOT NULL CHECK(type IN ('patient', 'caretaker'))
       );
     `);
+
+    await db.run(`CREATE TABLE IF NOT EXISTS caretaker_patient (
+    caretaker_id INTEGER,
+    patient_id INTEGER,
+    PRIMARY KEY (caretaker_id, patient_id),
+    FOREIGN KEY (caretaker_id) REFERENCES user(id),
+    FOREIGN KEY (patient_id) REFERENCES user(id)
+  )`);
+
+  await db.run(`CREATE TABLE IF NOT EXISTS medication_plan (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    patient_id INTEGER,
+    name TEXT NOT NULL,
+    dosage TEXT,
+    frequency TEXT,
+    time TEXT,
+    start_date DATE,
+    end_date DATE,
+    FOREIGN KEY (patient_id) REFERENCES user(id)
+  )`);
+
+  await db.run(`CREATE TABLE IF NOT EXISTS daily_actions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    medication_id INTEGER,
+    action_date DATE,
+    status TEXT CHECK (status IN ('pending', 'taken', 'missed')) DEFAULT 'pending',
+    notes TEXT,
+    FOREIGN KEY (medication_id) REFERENCES medication_plan(id)
+  )`);
   } catch (err) {
     console.log(err);
     process.exit(1);
@@ -72,18 +101,27 @@ let verifyUser = async (request, response, next) => {
 
 //Login API
 app.post("/login", async (request, response) => {
-  let { username, password } = request.body;
+  let { username, password, type } = request.body;
+
   let getQuery = `SELECT * FROM user WHERE username = '${username}'`;
   let userDetail = await db.get(getQuery);
 
   if (userDetail !== undefined) {
+    if (userDetail.type !== type) {
+      response.status(400);
+      response.send("Invalid user type selected");
+      return;
+    }
+
     let isPasswordMatched = await bcrypt.compare(password, userDetail.password);
     if (isPasswordMatched) {
-      let jwtToken;
-      let payload = { username: userDetail.username };
-      jwtToken = await jwt.sign(payload, "jhfaiern23r4j");
+      let payload = { username: userDetail.username, type: userDetail.type };
+      let jwtToken = await jwt.sign(payload, "jhfaiern23r4j");
+
       response.send({
-        jwtToken: jwtToken,
+        jwtToken,
+        userid: userDetail.id,
+        type: userDetail.type,
       });
     } else {
       response.status(400);
