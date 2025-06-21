@@ -196,7 +196,7 @@ app.get("/medications", async (req, res) => {
     JOIN user p ON p.id = mp.patient_id
     JOIN caretaker_patient cp ON cp.patient_id = p.id
     JOIN user c ON c.id = cp.caretaker_id
-    WHERE c.username = ?
+    WHERE c.username = ?;
   `;
 
   try {
