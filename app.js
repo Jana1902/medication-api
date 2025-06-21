@@ -31,7 +31,6 @@ let initializeDb = async () => {
     app.listen(3000, () => {
       console.log("Server is started");
     });
-    console.log(data);
 
     await db.run(`
       CREATE TABLE IF NOT EXISTS user (
@@ -237,16 +236,17 @@ app.post("/add-patient", async (req, res) => {
   const { name, password, caretakerId } = req.body;
 
   try {
-    const existingUser = await db.get(
-      `SELECT * FROM user WHERE username = ?`,
-      [name]
-    );
+    const existingUser = await db.get(`SELECT * FROM user WHERE username = ?`, [
+      name,
+    ]);
     if (existingUser) {
       return res.status(400).json({ error: "Username already exists" });
     }
 
     if (!password || password.length < 8) {
-      return res.status(400).json({ error: "Password must be at least 8 characters long" });
+      return res
+        .status(400)
+        .json({ error: "Password must be at least 8 characters long" });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
