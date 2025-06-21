@@ -197,7 +197,7 @@ WHERE patient_id = (SELECT id FROM user WHERE username = ? AND type = 'patient')
 
   try {
     const rows = await db.all(query, [caretakerUsername]);
-    res.json(rows);
+    res.send(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -397,6 +397,61 @@ app.get("/caretaker-dashboard", verifyUser, async (req, res) => {
   } catch (err) {
     console.error("Error in caretaker dashboard:", err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/patient/update-medication-status", async (req, res) => {
+  const { username, medicationName, status, notes } = req.body;
+  const date = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+
+  if (!username || !medicationName || !status) {
+    return res.status(400).json({ error: "Required fields missing" });
+  }
+
+  try {
+    // 1. Get patient ID
+    const patient = await db.get(
+      `SELECT id FROM user WHERE username = ? AND type = 'patient'`,
+      [username]
+    );
+    if (!patient) {
+      return res.status(404).json({ error: "Patient not found" });
+    }
+
+    // 2. Get medication ID for this patient
+    const medication = await db.get(
+      `SELECT id FROM medication_plan WHERE name = ? AND patient_id = ?`,
+      [medicationName, patient.id]
+    );
+    if (!medication) {
+      return res.status(404).json({ error: "Medication not found for this user" });
+    }
+
+    // 3. Check if an entry for today already exists
+    const existing = await db.get(
+      `SELECT id FROM daily_actions WHERE medication_id = ? AND action_date = ?`,
+      [medication.id, date]
+    );
+
+    if (existing) {
+      // Update existing status
+      await db.run(
+        `UPDATE daily_actions SET status = ?, notes = ? WHERE id = ?`,
+        [status, notes || "", existing.id]
+      );
+    } else {
+      // Create new daily action
+      await db.run(
+        `INSERT INTO daily_actions (medication_id, action_date, status, notes)
+         VALUES (?, ?, ?, ?)`,
+        [medication.id, date, status, notes || ""]
+      );
+    }
+
+    res.json({ success: true, message: "Medication status updated" });
+  } catch (err) {
+    console.error("Update medication status error:", err);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
