@@ -32,6 +32,11 @@ let initializeDb = async () => {
       console.log("Server is started");
     });
 
+    const data = await db.get(`SELECT * FROM user WHERE username = ?`, [
+      "kirubha",
+    ]);
+    console.log(data);
+
     await db.run(`
       CREATE TABLE IF NOT EXISTS user (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -386,6 +391,5 @@ app.get("/caretaker-dashboard", verifyUser, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
 
 module.exports = app;
