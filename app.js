@@ -49,7 +49,7 @@ let initializeDb = async () => {
     FOREIGN KEY (patient_id) REFERENCES user(id)
   )`);
 
-  await db.run(`CREATE TABLE IF NOT EXISTS medication_plan (
+    await db.run(`CREATE TABLE IF NOT EXISTS medication_plan (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     patient_id INTEGER,
     name TEXT NOT NULL,
@@ -61,7 +61,7 @@ let initializeDb = async () => {
     FOREIGN KEY (patient_id) REFERENCES user(id)
   )`);
 
-  await db.run(`CREATE TABLE IF NOT EXISTS daily_actions (
+    await db.run(`CREATE TABLE IF NOT EXISTS daily_actions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     medication_id INTEGER,
     action_date DATE,
@@ -120,6 +120,7 @@ app.post("/login", async (request, response) => {
 
       response.send({
         jwtToken,
+        username: userDetail.username,
         userid: userDetail.id,
         type: userDetail.type,
       });
@@ -165,6 +166,172 @@ app.post("/register", async (request, response) => {
   await db.run(postQuery);
   response.status(200);
   response.send("User created successfully");
+});
+
+app.get("/patients", verifyUser, async (req, res) => {
+  const caretakerUsername = req.query.caretaker;
+
+  const query = `
+    SELECT p.id, p.username as name
+    FROM user p
+    JOIN caretaker_patient cp ON cp.patient_id = p.id
+    JOIN user c ON c.id = cp.caretaker_id
+    WHERE c.username = ? AND p.type = 'patient'
+  `;
+
+  try {
+    const rows = await db.all(query, [caretakerUsername]);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/medications", async (req, res) => {
+  const caretakerUsername = req.query.caretaker;
+
+  const query = `
+    SELECT mp.*
+    FROM medication_plan mp
+    JOIN user p ON p.id = mp.patient_id
+    JOIN caretaker_patient cp ON cp.patient_id = p.id
+    JOIN user c ON c.id = cp.caretaker_id
+    WHERE c.username = ?
+  `;
+
+  try {
+    const rows = await db.all(query, [caretakerUsername]);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/add-medication", async (req, res) => {
+  const { patient_id, name, dosage, frequency, time, start_date, end_date } =
+    req.body;
+
+  const insert = `
+    INSERT INTO medication_plan (patient_id, name, dosage, frequency, time, start_date, end_date)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `;
+
+  try {
+    const result = await db.run(insert, [
+      patient_id,
+      name,
+      dosage,
+      frequency,
+      time,
+      start_date,
+      end_date,
+    ]);
+    res.json({ success: true, id: result.lastID });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/add-patient", async (req, res) => {
+  const { name, password, caretakerId } = req.body;
+
+  try {
+    const result = await db.run(
+      `INSERT INTO user (username, password, type) VALUES (?, ?, 'patient')`,
+      [name, password]
+    );
+
+    const patientId = result.lastID;
+
+    await db.run(
+      `INSERT INTO caretaker_patient (caretaker_id, patient_id) VALUES (?, ?)`,
+      [caretakerId, patientId]
+    );
+
+    res.json({ success: true, patientId });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/patient/:id/streak", verifyUser, async (req, res) => {
+  const { id } = req.params;
+  const query = `
+    SELECT action_date, status FROM daily_actions
+    WHERE medication_id IN (
+      SELECT id FROM medication_plan WHERE patient_id = ?
+    ) AND status = 'taken'
+    ORDER BY action_date DESC
+  `;
+  try {
+    const actions = await db.all(query, [id]);
+    let streak = 0;
+    let currentDate = new Date();
+    for (const action of actions) {
+      const actionDate = new Date(action.action_date);
+      if (actionDate.toDateString() === currentDate.toDateString()) {
+        streak++;
+        currentDate.setDate(currentDate.getDate() - 1);
+      } else {
+        break;
+      }
+    }
+    res.json({ streak });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Today's Status API
+app.get("/patient/:id/today-status", verifyUser, async (req, res) => {
+  const { id } = req.params;
+  const today = new Date().toISOString().split("T")[0];
+  const query = `
+    SELECT status FROM daily_actions
+    WHERE medication_id IN (
+      SELECT id FROM medication_plan WHERE patient_id = ?
+    ) AND action_date = ?
+  `;
+  try {
+    const rows = await db.all(query, [id, today]);
+    const taken = rows.filter((r) => r.status === "taken").length;
+    const pending = rows.filter((r) => r.status === "pending").length;
+    const missed = rows.filter((r) => r.status === "missed").length;
+
+    let status = "pending";
+    if (taken === rows.length) status = "taken";
+    else if (missed > 0 && taken === 0) status = "missed";
+
+    res.json({ total: rows.length, taken, pending, missed, status });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Monthly Completion Percentage API
+app.get("/patient/:id/monthly-percentage", verifyUser, async (req, res) => {
+  const { id } = req.params;
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = (now.getMonth() + 1).toString().padStart(2, "0");
+  const startDate = `${year}-${month}-01`;
+  const endDate = `${year}-${month}-31`;
+
+  const query = `
+    SELECT status FROM daily_actions
+    WHERE medication_id IN (
+      SELECT id FROM medication_plan WHERE patient_id = ?
+    ) AND action_date BETWEEN ? AND ?
+  `;
+  try {
+    const rows = await db.all(query, [id, startDate, endDate]);
+    const total = rows.length;
+    const taken = rows.filter((r) => r.status === "taken").length;
+    const percentage = total > 0 ? Math.round((taken / total) * 100) : 0;
+    res.json({ total, taken, percentage });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 module.exports = app;
