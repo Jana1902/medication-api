@@ -99,6 +99,10 @@ let verifyUser = async (request, response, next) => {
   }
 };
 
+app.get('/health', (req, res) => {
+  res.status(200).send('OK'); 
+});
+
 //Login API
 app.post("/login", async (request, response) => {
   let { username, password, type } = request.body;
